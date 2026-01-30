@@ -4,7 +4,7 @@ import { userApi } from '../api/userApi';
 import { 
   Terminal, Clock, User, ChevronRight, 
   Eye, X, MessageSquare, Shield, Activity, FileText,
-  ChevronLeft, Database, Cpu, Zap, AlertCircle 
+  ChevronDown, ChevronUp, Database, Cpu, Zap, AlertCircle 
 } from 'lucide-react';
 
 const NeuralLogs = () => {
@@ -15,17 +15,9 @@ const NeuralLogs = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [raw, setRaw] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const logsPerPage = 10;
-
-  useEffect(() => {
-    const element = document.getElementById('log-top');
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [currentPage]);
+  
+  const INITIAL_VISIBLE_COUNT = 10;
+  const [visibleLogsCount, setVisibleLogsCount] = useState(INITIAL_VISIBLE_COUNT);
 
   useEffect(() => {
     const initializeFilters = async () => {
@@ -46,7 +38,7 @@ const NeuralLogs = () => {
   const loadLogs = async (agentCode) => {
     if (!agentCode) return;
     setLoading(true);
-    setCurrentPage(1);
+    setVisibleLogsCount(INITIAL_VISIBLE_COUNT);
     try {
       const res = await agentApi.getLogs(agentCode, 100);
       setLogs(Array.isArray(res.data.logs) ? res.data.logs : []);
@@ -54,20 +46,47 @@ const NeuralLogs = () => {
     finally { setLoading(false); }
   };
 
+  useEffect(() => {
+    if (selectedUser && !selectedAgent && agents.length > 0) {
+      loadLogs(agents[0]);
+    }
+  }, [selectedUser, agents, selectedAgent]);
+
+  // --- UPDATED: BEAUTIFIED TEXT RENDERER ---
   const renderBeautifiedContent = (data) => {
-    if (typeof data !== 'object' || data === null) return <span className="text-slate-700">{String(data)}</span>;
+    if (typeof data !== 'object' || data === null) {
+      return <span className="text-black font-extrabold">{String(data)}</span>;
+    }
+
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
         {Object.entries(data).map(([key, value]) => {
-          if (['timestamp', 'user_id', 'username', 'id'].includes(key)) return null;
+          // Skip internal technical IDs and timestamps already shown in header
+          if (['timestamp', 'user_id', 'username', 'id', 'agent_code'].includes(key)) return null;
+
+          let displayValue;
+          if (typeof value === 'object' && value !== null) {
+            // Recursive call for nested objects to keep everything beautified
+            displayValue = (
+              <div className="space-y-2 mt-2 border-l-2 border-emerald-500/20 pl-3">
+                {Object.entries(value).map(([subKey, subValue]) => (
+                  <div key={subKey} className="flex flex-col">
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{subKey.replace(/_/g, ' ')}</span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-900">{String(subValue)}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          } else {
+            displayValue = <span className="text-[11px] font-mono font-bold text-black break-all leading-tight">{String(value)}</span>;
+          }
+
           return (
-            <div key={key} className="flex flex-col p-2 bg-white/50 border border-slate-100 rounded-lg">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mb-1 flex items-center gap-1">
-                <div className="w-1 h-1 bg-indigo-400 rounded-full" /> {key.replace(/_/g, ' ')}
+            <div key={key} className="flex flex-col p-4 bg-white border-2 border-black rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+              <span className="text-[9px] font-black text-emerald-700 uppercase tracking-[0.15em] mb-1 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> {key.replace(/_/g, ' ')}
               </span>
-              <span className="text-[11px] font-mono font-medium text-slate-700 break-all">
-                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-              </span>
+              {displayValue}
             </div>
           );
         })}
@@ -77,139 +96,163 @@ const NeuralLogs = () => {
 
   const filteredLogs = logs.filter(log => {
     if (!selectedUser) return true;
-    // Checks both user_id and username against the selected identity
     return String(log.user_id) === String(selectedUser) || String(log.username) === String(selectedUser);
   });
 
-  const indexOfLastLog = currentPage * logsPerPage;
-  const indexOfFirstLog = indexOfLastLog - logsPerPage;
-  const currentLogsSlice = filteredLogs.slice(indexOfFirstLog, indexOfLastLog);
-  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+  const currentLogsSlice = filteredLogs.slice(0, visibleLogsCount);
+  const isSessionActive = selectedAgent !== '' || selectedUser !== '';
 
-  // Determine which state to show
-  const hasActiveFilter = selectedAgent !== '' || selectedUser !== '';
-  const hasResults = currentLogsSlice.length > 0;
+  const handleLoadMore = () => setVisibleLogsCount(prev => prev + 10);
+  const handleLoadLess = () => setVisibleLogsCount(INITIAL_VISIBLE_COUNT);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <div id="log-top" className="absolute top-0" />
+    <div className="p-8 max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700">
+      
+      {/* 1. BANNER */}
+      <div className="banner-engro-green w-full p-16 rounded-[2.5rem] border-2 border-black flex flex-col justify-center min-h-[250px] shadow-lg">
+        <h2 className="text-5xl font-black text-black italic uppercase tracking-tighter leading-none">Agent Log Buffer</h2>
+        <p className="text-black font-bold text-xl mt-3 opacity-80 italic">Audit Chain Discovery & Incremental Analysis</p>
+      </div>
 
-      {/* FILTER HEADER */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-        <div className="flex justify-between items-center border-b border-slate-50 pb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-indigo-400 shadow-lg">
-              <Cpu size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 italic uppercase tracking-tighter leading-none">Neural Log Buffer</h2>
-              <p className="text-[10px] text-indigo-600 font-mono tracking-widest uppercase mt-2 font-bold italic">Audit Chain Discovery</p>
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl text-slate-400 font-mono text-[10px] uppercase border border-slate-100">
-            <Activity size={12} className="text-emerald-500" /> Operational_Status: Nominal
-          </div>
+      {/* 2. FILTERS */}
+      <div className="bg-white p-10 rounded-[3rem] border-2 border-black shadow-[8px_8px_0px_rgba(0,0,0,0.05)] space-y-8">
+        <div className="flex items-center gap-3 border-b-2 border-black/5 pb-6">
+            <Activity size={24} className="text-emerald-600" />
+            <h3 className="text-xl font-black text-black uppercase italic tracking-tight">Stream Selectors</h3>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Zap size={12} /> Target Sequence (Agent) </label>
-            <select value={selectedAgent} onChange={(e) => { setSelectedAgent(e.target.value); loadLogs(e.target.value); }} className="w-full bg-slate-900 text-white rounded-2xl px-6 py-4 text-xs font-black uppercase outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer">
-              <option value="">Choose Agent Code</option>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-black uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                <Zap size={14} className="text-emerald-500" /> Target Agent Node
+            </label>
+            <select 
+                value={selectedAgent} 
+                onChange={(e) => { setSelectedAgent(e.target.value); loadLogs(e.target.value); }} 
+                className="w-full bg-black text-white rounded-2xl px-8 py-5 text-xs font-black uppercase outline-none border-2 border-black transition-all appearance-none cursor-pointer"
+            >
+              <option value="">-- SELECT SOURCE NODE --</option>
               {agents.map((code, idx) => <option key={idx} value={code}>{String(code).toUpperCase()}</option>)}
             </select>
           </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><User size={12} /> Subject Identity (User) </label>
-            <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-xs font-black uppercase outline-none focus:border-indigo-500 appearance-none cursor-pointer">
-              <option value="">Global Broadcast (All Users)</option>
+          
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-black uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                <User size={14} className="text-emerald-500" /> Personnel Identity
+            </label>
+            <select 
+                value={selectedUser} 
+                onChange={(e) => setSelectedUser(e.target.value)} 
+                className="w-full bg-white border-2 border-black rounded-2xl px-8 py-5 text-xs font-black uppercase outline-none focus:bg-emerald-50 transition-all cursor-pointer shadow-inner"
+            >
+              <option value="">GLOBAL BROADCAST (ALL USERS)</option>
               {personnel.map(u => <option key={u.id} value={u.username}>{u.name || u.username}</option>)}
             </select>
           </div>
         </div>
       </div>
 
-      {/* LOG CONTENT */}
-      <div className="space-y-4">
+      {/* 3. LOG CONTENT STREAM */}
+      <div className="space-y-6">
         {loading ? (
-          <div className="text-center font-mono py-20 text-indigo-500 animate-pulse uppercase tracking-[0.3em]">Decoding_Data_Packets...</div>
-        ) : hasActiveFilter && hasResults ? (
+          <div className="text-center font-black py-32 text-black animate-pulse uppercase tracking-[0.5em] italic">DECODING_DATA_STREAM...</div>
+        ) : isSessionActive && currentLogsSlice.length > 0 ? (
           <>
             {currentLogsSlice.map((log, i) => (
-              <div key={i} className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm flex gap-6 items-start group hover:border-indigo-300 transition-all">
-                <div className={`p-4 rounded-2xl border transition-colors ${log.error ? 'bg-red-50 text-red-500 border-red-100' : 'bg-slate-50 text-slate-400 border-slate-100 group-hover:text-indigo-600'}`}>
-                   {log.error ? <AlertCircle size={20} /> : <Terminal size={20} />}
+              <div key={i} className="bg-white border-2 border-black p-10 rounded-[3.5rem] shadow-[8px_8px_0px_rgba(0,0,0,0.05)] flex flex-col md:flex-row gap-10 items-start group hover:-translate-y-1 transition-all duration-300">
+                <div className={`p-6 rounded-[2rem] border-2 border-black transition-all ${log.error ? 'bg-red-600 text-white' : 'bg-black text-white group-hover:bg-emerald-600'}`}>
+                   {log.error ? <AlertCircle size={28} /> : <Terminal size={28} />}
                 </div>
                 
-                <div className="flex-1 space-y-4">
+                <div className="flex-1 space-y-6 w-full">
                   <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1 bg-slate-900 text-[9px] font-black text-white px-3 py-1 rounded-full uppercase tracking-tighter shadow-md">
-                        <User size={10} /> {log.user_id || log.username || 'SYS_AUTH'}
+                    <div className="flex items-center gap-5">
+                      <div className="bg-black text-[10px] font-black text-white px-5 py-2 rounded-full uppercase tracking-widest shadow-lg">
+                        <User size={12} className="inline mr-2 mb-0.5" /> {log.user_id || log.username || 'SYSTEM_CORE'}
                       </div>
-                      <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono italic">
-                        <Clock size={10} /> {log.timestamp || 'T-Minus_0'}
+                      <div className="flex items-center gap-2 text-slate-400 font-mono font-bold text-xs">
+                        <Clock size={14} /> {log.timestamp || 'T-MINUS_0'}
                       </div>
                     </div>
-                    <button onClick={() => setRaw(log)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl transition-all"><Database size={16} /></button>
+                    <button onClick={() => setRaw(log)} className="p-4 text-black border-2 border-black rounded-2xl hover:bg-emerald-50 transition-all active:scale-90"><Database size={20} /></button>
                   </div>
 
-                  <div className="bg-slate-50/50 border border-slate-100 p-6 rounded-3xl">
-                     <div className="mb-4">
-                        <p className="text-xs font-black text-slate-900 uppercase tracking-widest mb-1 italic">Primary Message</p>
-                        <p className="text-sm text-slate-600 font-medium italic leading-relaxed">
-                          {log.message || log.input || "No text data in payload."}
+                  <div className="bg-slate-50 border-2 border-black/5 p-8 rounded-[2.5rem]">
+                      <div className="mb-6 pb-6 border-b-2 border-black/5">
+                        <p className="text-[10px] font-black text-black uppercase tracking-[0.2em] mb-2 opacity-50">Transmission Content</p>
+                        <p className="text-[17px] text-black font-bold italic leading-relaxed">
+                          "{log.message || log.input || "Data payload is encrypted or empty."}"
                         </p>
-                     </div>
-                     <div className="border-t border-slate-100 pt-4">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Extended Metadata</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-emerald-800 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                            <Cpu size={14} /> Agent Metadata Matrix
+                        </p>
                         {renderBeautifiedContent(log)}
-                     </div>
+                      </div>
                   </div>
                 </div>
               </div>
             ))}
 
-            {/* PAGINATION */}
-            {totalPages > 1 && (
-              <div className="flex flex-col items-center gap-6 py-10">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center disabled:opacity-20 hover:bg-slate-50 transition-all shadow-sm active:scale-95"><ChevronLeft size={20} /></button>
-                  <div className="flex gap-2">
-                    {[...Array(totalPages)].map((_, i) => (
-                      <button key={i} onClick={() => setCurrentPage(i + 1)} className={`w-12 h-12 rounded-2xl font-mono text-xs font-black transition-all border ${currentPage === i + 1 ? "bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-100 scale-110" : "bg-white text-slate-400 border-slate-200 hover:border-indigo-300"}`}>{i + 1}</button>
-                    ))}
-                  </div>
-                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center disabled:opacity-20 hover:bg-slate-50 transition-all shadow-sm active:scale-95"><ChevronRight size={20} /></button>
-                </div>
+            <div className="flex flex-col items-center gap-8 py-16">
+              <div className="flex gap-4">
+                {visibleLogsCount < filteredLogs.length && (
+                  <button 
+                    onClick={handleLoadMore} 
+                    className="bg-black text-white px-10 py-5 rounded-[2rem] border-2 border-black font-black text-xs uppercase tracking-[0.2em] shadow-[6px_6px_0px_#10b981] hover:bg-emerald-600 transition-all flex items-center gap-3 active:translate-y-1 active:shadow-none"
+                  >
+                    <ChevronDown size={20} strokeWidth={3} /> Load More Records
+                  </button>
+                )}
+
+                {visibleLogsCount > INITIAL_VISIBLE_COUNT && (
+                  <button 
+                    onClick={handleLoadLess} 
+                    className="bg-white text-black px-10 py-5 rounded-[2rem] border-2 border-black font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-50 transition-all flex items-center gap-3 active:translate-y-1"
+                  >
+                    <ChevronUp size={20} strokeWidth={3} /> Minimize Stream
+                  </button>
+                )}
               </div>
-            )}
+              
+              <div className="flex items-center gap-4">
+                <div className="h-0.5 w-12 bg-black/10 rounded-full" />
+                <p className="text-[11px] font-mono font-black text-slate-400 uppercase tracking-[0.5em]">
+                    Visible: {currentLogsSlice.length} // Total: {filteredLogs.length}
+                </p>
+                <div className="h-0.5 w-12 bg-black/10 rounded-full" />
+              </div>
+            </div>
           </>
-        ) : hasActiveFilter ? (
-          /* EMPTY STATE (Filters applied but no logs found) */
-          <div className="py-40 text-center border-2 border-dashed border-slate-200 rounded-[3rem]">
-            <MessageSquare className="mx-auto text-slate-200 mb-4" size={48} />
-            <p className="text-slate-400 font-mono uppercase text-xs tracking-widest italic px-10 text-center">No traffic logs found matching this filter combination.</p>
+        ) : isSessionActive ? (
+          <div className="py-48 text-center border-4 border-dashed border-black/10 rounded-[5rem] bg-white">
+            <MessageSquare className="mx-auto text-slate-300 mb-6" size={80} />
+            <p className="text-black font-black text-2xl uppercase tracking-widest italic">No filtered results in current sequence.</p>
           </div>
         ) : (
-          /* INITIAL STATE (Nothing selected) */
-          <div className="py-40 text-center opacity-30">
-            <FileText className="mx-auto text-slate-200 mb-6" size={80} />
-            <p className="text-slate-900 font-black text-2xl uppercase tracking-[0.4em] italic text-center leading-tight">Awaiting_Neural_Target<br/><span className="text-sm font-mono tracking-widest text-slate-400">Select an agent or user above</span></p>
+          <div className="py-56 text-center opacity-30">
+            <FileText className="mx-auto text-black mb-10" size={120} />
+            <p className="text-black font-black text-4xl uppercase tracking-[0.6em] italic leading-tight text-center">
+                Awaiting_Agent_Target
+            </p>
           </div>
         )}
       </div>
 
       {/* RAW PACKET MODAL */}
       {raw && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 flex items-center justify-center p-6 backdrop-blur-xl animate-in fade-in duration-300">
-           <div className="bg-slate-900 border border-white/5 w-full max-w-2xl rounded-[3rem] flex flex-col overflow-hidden animate-in zoom-in-95">
-              <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
-                 <h3 className="text-white font-mono text-[10px] uppercase tracking-[0.3em] flex items-center gap-2"><Terminal size={14} className="text-indigo-400" /> raw_packet_buffer</h3>
-                 <button onClick={() => setRaw(null)} className="text-slate-400 hover:text-white p-2 hover:bg-white/5 rounded-full transition-all"><X size={24}/></button>
+        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-8 backdrop-blur-2xl animate-in fade-in duration-300">
+           <div className="bg-zinc-950 border-2 border-emerald-500/40 w-full max-w-4xl rounded-[4rem] flex flex-col overflow-hidden animate-in zoom-in-95 shadow-[0_0_100px_rgba(16,185,129,0.15)]">
+              <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black">
+                 <div className="flex items-center gap-3">
+                    <Terminal size={20} className="text-emerald-400" />
+                    <h3 className="text-white font-mono text-xs uppercase tracking-[0.4em] font-black">raw_packet_buffer</h3>
+                 </div>
+                 <button onClick={() => setRaw(null)} className="text-white/40 hover:text-white border-2 border-white/10 p-3 rounded-2xl hover:bg-white/5 transition-all"><X size={28}/></button>
               </div>
-              <pre className="p-8 text-indigo-300 font-mono text-[11px] overflow-auto h-[60vh] custom-scrollbar">
-                {JSON.stringify(raw, null, 2)}
+              <pre className="p-12 text-emerald-400 font-mono text-[12px] overflow-auto h-[60vh] custom-scrollbar bg-black/50">
+                {JSON.stringify(raw, null, 4)}
               </pre>
            </div>
         </div>

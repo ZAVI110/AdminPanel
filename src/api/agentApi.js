@@ -86,4 +86,6 @@ export const agentApi = {
   // Fetch audit trail / logs
   getLogs: (agentCode, limit = 100) => 
     client.get(`/agent/${encodeURIComponent(agentCode)}/tools/logs?limit=${limit}`),
+  // Add this inside the agentApi object
+getUsage: () => client.get('/agent/usage'),
 };

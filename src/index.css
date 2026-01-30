@@ -3,6 +3,12 @@
 @theme {
   --color-brand: #4f46e5;
   --color-bg-main: #f8fafc;
+  
+  /* Engro Corporate Branding Colors */
+  --color-engro-forest: #0b4f18;
+  --color-engro-light: #8dc66f;
+  --color-engro-accent: #a8d58d;
+  --color-outline-black: #000000;
 }
 
 @layer base {
@@ -12,11 +18,34 @@
   }
 }
 
-/* Elegant Light Scrollbar */
+/* THE ENGRO WELCOME BANNER */
+.engro-central-banner {
+  @apply relative overflow-hidden flex flex-col justify-center shadow-lg border-2 border-black;
+  width: 100%;
+  padding: 45px 50px;
+  /* Green Gradient from Image */
+  background: linear-gradient(90deg, var(--color-engro-light) 0%, var(--color-engro-accent) 100%) !important;
+  border-radius: 2.5rem;
+}
+
+/* TOPOGRAPHIC PATTERN OVERLAY */
+.engro-central-banner::before {
+  content: "";
+  @apply absolute inset-0 opacity-20 pointer-events-none;
+  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3z' fill='%23ffffff' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E");
+  background-size: cover;
+}
+
+/* HIGH-CONTRAST DASHBOARD CARDS */
+.highlight-card {
+  @apply bg-white border-2 border-black rounded-[2.5rem] transition-transform duration-300;
+  box-shadow: 6px 6px 0px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { 
   background: #cbd5e1;
   border-radius: 10px;
 }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
